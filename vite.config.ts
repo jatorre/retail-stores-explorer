@@ -13,11 +13,7 @@ import { join } from 'node:path';
  * CARTO_API_BASE_URL=<url> if the tenant is not <tenant_id>.api.carto.com.
  */
 function cartoDevSession(): Plugin {
-  return {
-    name: 'carto-dev-session',
-    apply: 'serve',
-    configureServer(server) {
-      server.middlewares.use((req, res, next) => {
+  const middleware = (req: { url?: string }, res: import('node:http').ServerResponse, next: () => void) => {
         if (!req.url || req.url.split('?')[0] !== '/carto-info.json') return next();
         res.setHeader('Content-Type', 'application/json');
         res.setHeader('Cache-Control', 'no-store');
@@ -29,20 +25,35 @@ function cartoDevSession(): Plugin {
             throw new Error(`No token for CARTO CLI profile "${profileName}". Run: carto auth login`);
           }
           const apiBaseUrl = process.env.CARTO_API_BASE_URL || `https://${profile.tenant_id}.api.carto.com`;
+          // CARTO_DEV_TOKEN=<token> replays a specific token (e.g. a public one) with a public-style session (user: null).
+          const override = process.env.CARTO_DEV_TOKEN;
           res.end(
-            JSON.stringify({
-              schemaVersion: 1,
-              accessToken: profile.token,
-              apiBaseUrl,
-              user: { id: 'dev', email: profile.user_email, accountId: profile.organization_id },
-              devProfile: profileName,
-            }),
+            JSON.stringify(
+              override
+                ? { schemaVersion: 1, accessToken: override, apiBaseUrl, user: null, devProfile: 'token-override' }
+                : {
+                    schemaVersion: 1,
+                    accessToken: profile.token,
+                    apiBaseUrl,
+                    user: { id: 'dev', email: profile.user_email, accountId: profile.organization_id },
+                    devProfile: profileName,
+                  },
+            ),
           );
         } catch (err) {
           res.statusCode = 500;
           res.end(JSON.stringify({ error: (err as Error).message }));
         }
-      });
+  };
+  return {
+    name: 'carto-dev-session',
+    apply: 'serve',
+    configureServer(server) {
+      server.middlewares.use(middleware);
+    },
+    // `vite preview` serves the production build with the same shim, so prod behaviour can be checked locally.
+    configurePreviewServer(server) {
+      server.middlewares.use(middleware);
     },
   };
 }

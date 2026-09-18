@@ -51,6 +51,7 @@ const HOME_VIEW: MapViewState = { longitude: -96.2, latitude: 38.6, zoom: 4.15, 
 const ORBIT_DEG_PER_SEC = 1.1;
 const ORBIT_RESUME_MS = 4000;
 const STORES_FROM_ZOOM = 6.5;
+const DEBUG = import.meta.env.DEV || new URLSearchParams(location.search).has('debug');
 
 const lighting = new LightingEffect({
   ambient: new AmbientLight({ color: [255, 255, 255], intensity: 1.35 }),
@@ -270,9 +271,14 @@ function onHexTilesLoaded(tiles: { content?: unknown }[]) {
       for (const m of Object.keys(values) as Metric[]) if (Number.isFinite(p[m])) values[m].push(Number(p[m]));
     }
   }
-  if (import.meta.env.DEV) {
-    const first = tiles[0] as { content?: unknown } | undefined;
-    console.debug('[hex] tiles', tiles.length, 'cells', values.revenue.length, 'content type', Array.isArray(first?.content) ? 'array' : typeof first?.content, first?.content && !Array.isArray(first.content) ? Object.keys(first.content as object).slice(0, 6) : '');
+  if (DEBUG) {
+    const shapes = new Map<string, number>();
+    for (const t of tiles) {
+      const c = (t as { content?: unknown }).content;
+      const k = c === null ? 'null' : Array.isArray(c) ? `array(${(c as unknown[]).length})` : typeof c === 'object' ? `object{${Object.keys(c as object).slice(0, 4).join(',')}}` : typeof c;
+      shapes.set(k, (shapes.get(k) ?? 0) + 1);
+    }
+    console.info('[hex] onViewportLoad tiles', tiles.length, 'cells', values.revenue.length, 'shapes', JSON.stringify([...shapes]));
   }
   if (values.revenue.length < 8) return;
   const next: Partial<Record<Metric, number[]>> = {};
@@ -526,7 +532,7 @@ function getTooltip({ object, layer }: PickingInfo) {
 
 function diveAt(x: number, y: number) {
   const info = deck.pickObject({ x, y, radius: 4 });
-  if (import.meta.env.DEV) console.debug('[click]', Boolean(info?.picked), info?.layer?.id, info?.sourceLayer?.id, info?.coordinate);
+  if (DEBUG) console.info('[click]', Boolean(info?.picked), info?.layer?.id, info?.sourceLayer?.id, info?.coordinate);
   if (!info?.picked) return;
   const onHex = [info.layer?.id, info.sourceLayer?.id].some((id) => id?.startsWith('hex-columns'));
   if (!onHex) return;
