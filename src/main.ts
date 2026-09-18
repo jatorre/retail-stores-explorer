@@ -217,6 +217,7 @@ function buildLayers() {
       getElevation: (f: { properties: Record<string, number> }) =>
         Math.sqrt(Math.min(Number(f.properties[metric] ?? 0), ceiling * 1.6) / ceiling) * height,
       elevationScale: 1,
+      onTileLoad: onHexTileLoaded,
       onViewportLoad: onHexTilesLoaded,
       updateTriggers: { getFillColor: [metric, state.breaksKey], getElevation: [metric, state.breaksKey, height] },
       transitions: { getElevation: 500, getFillColor: 300 },
@@ -256,7 +257,51 @@ function refreshLayers() {
   deck.setProps({ layers: buildLayers() });
 }
 
-/** Learn colour breaks from the H3 tiles in view: quantiles of the current metric. */
+/** Values seen in loaded H3 tiles, keyed by tile id, so breaks can be learnt without waiting for every tile. */
+const tileValues = new Map<string, Record<Metric, number[]>>();
+let breaksTimer: ReturnType<typeof setTimeout> | undefined;
+
+function onHexTileLoaded(tile: { id?: string; index?: unknown; content?: unknown }) {
+  const id = String(tile.id ?? JSON.stringify(tile.index));
+  const values: Record<Metric, number[]> = { revenue: [], n: [], size_m2: [] };
+  const raw = tile.content;
+  const cells: { properties?: Record<string, number> }[] = Array.isArray(raw) ? (raw as { properties?: Record<string, number> }[]) : [];
+  for (const c of cells) {
+    const p = c.properties ?? {};
+    for (const m of Object.keys(values) as Metric[]) if (Number.isFinite(p[m])) values[m].push(Number(p[m]));
+  }
+  tileValues.set(id, values);
+  if (tileValues.size > 400) tileValues.delete(tileValues.keys().next().value!);
+  if (breaksTimer) clearTimeout(breaksTimer);
+  breaksTimer = setTimeout(() => learnBreaks([...tileValues.values()]), 250);
+}
+
+/** Learn colour breaks and the height ceiling from every H3 tile seen so far. */
+function learnBreaks(pools: Record<Metric, number[]>[]) {
+  const values: Record<Metric, number[]> = { revenue: [], n: [], size_m2: [] };
+  for (const pool of pools) for (const m of Object.keys(values) as Metric[]) values[m].push(...pool[m]);
+  if (DEBUG) console.info('[hex] learnBreaks from', pools.length, 'tiles,', values.revenue.length, 'cells');
+  if (values.revenue.length < 8) return;
+  const next: Partial<Record<Metric, number[]>> = {};
+  const ceilings: Partial<Record<Metric, number>> = {};
+  for (const m of Object.keys(values) as Metric[]) {
+    const sorted = [...values[m]].sort((a, b) => a - b);
+    const lo = sorted[Math.floor(sorted.length * 0.02)] ?? 0;
+    const hi = Math.max(sorted[Math.floor(sorted.length * 0.995)] ?? 1, lo + 1e-9);
+    ceilings[m] = hi;
+    const n = HEX_COLORS.length;
+    next[m] = Array.from({ length: n - 1 }, (_, i) => lo + (hi - lo) * Math.pow((i + 1) / n, 2));
+  }
+  const key = JSON.stringify(next[state.metric]!.map((v) => Math.round(v)));
+  if (key === state.breaksKey) return;
+  state.breaks = next;
+  state.ceiling = ceilings;
+  state.breaksKey = key;
+  renderLegend();
+  refreshLayers();
+}
+
+/** Kept as a second trigger: when every selected tile is in, learn from all of them at once. */
 function onHexTilesLoaded(tiles: { content?: unknown }[]) {
   const values: Record<Metric, number[]> = { revenue: [], n: [], size_m2: [] };
   for (const t of tiles) {
@@ -271,35 +316,8 @@ function onHexTilesLoaded(tiles: { content?: unknown }[]) {
       for (const m of Object.keys(values) as Metric[]) if (Number.isFinite(p[m])) values[m].push(Number(p[m]));
     }
   }
-  if (DEBUG) {
-    const shapes = new Map<string, number>();
-    for (const t of tiles) {
-      const c = (t as { content?: unknown }).content;
-      const k = c === null ? 'null' : Array.isArray(c) ? `array(${(c as unknown[]).length})` : typeof c === 'object' ? `object{${Object.keys(c as object).slice(0, 4).join(',')}}` : typeof c;
-      shapes.set(k, (shapes.get(k) ?? 0) + 1);
-    }
-    console.info('[hex] onViewportLoad tiles', tiles.length, 'cells', values.revenue.length, 'shapes', JSON.stringify([...shapes]));
-  }
-  if (values.revenue.length < 8) return;
-  const next: Partial<Record<Metric, number[]>> = {};
-  const ceilings: Partial<Record<Metric, number>> = {};
-  for (const m of Object.keys(values) as Metric[]) {
-    const sorted = [...values[m]].sort((a, b) => a - b);
-    const lo = sorted[Math.floor(sorted.length * 0.02)] ?? 0;
-    const hi = Math.max(sorted[Math.floor(sorted.length * 0.995)] ?? 1, lo + 1e-9);
-    ceilings[m] = hi;
-    // Square-root spacing between the 2nd and 99.5th percentile: sparse hexagons stay in the cool
-    // end, mid-sized cities spread through the middle, only true metros reach the bright end.
-    const n = HEX_COLORS.length;
-    next[m] = Array.from({ length: n - 1 }, (_, i) => lo + (hi - lo) * Math.pow((i + 1) / n, 2));
-  }
-  const key = JSON.stringify(next[state.metric]!.map((v) => Math.round(v)));
-  if (key === state.breaksKey) return;
-  state.breaks = next;
-  state.ceiling = ceilings;
-  state.breaksKey = key;
-  renderLegend();
-  refreshLayers();
+  if (DEBUG) console.info('[hex] onViewportLoad tiles', tiles.length, 'cells', values.revenue.length);
+  learnBreaks([values]);
 }
 
 // ---------------------------------------------------------------------------
@@ -411,6 +429,7 @@ function applyTypeFilter() {
     removeFilter(filters, { column: CATEGORY_COLUMN, owner: CATEGORY_OWNER });
   }
   state.breaksKey = '';
+  tileValues.clear();
   buildSources();
   refreshLayers();
   renderChips();
@@ -465,6 +484,7 @@ resInput.addEventListener('input', () => {
   state.breaks = {};
   state.ceiling = {};
   state.breaksKey = '';
+  tileValues.clear();
   buildSources();
   renderLegend();
   refreshLayers();
