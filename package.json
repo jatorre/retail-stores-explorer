@@ -1,0 +1,26 @@
+{
+  "name": "retail-stores-explorer",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "CARTO Hosted App demo: retail stores explorer powered by the per-viewer CARTO token",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "deploy": "npm run build && carto app deploy dist --name \"Retail Stores Explorer\" --slug retail-stores-explorer"
+  },
+  "dependencies": {
+    "@carto/api-client": "^0.5.34",
+    "@deck.gl/carto": "^9.4.0",
+    "@deck.gl/core": "^9.4.0",
+    "@deck.gl/layers": "^9.4.0",
+    "cartocolor": "^5.0.2",
+    "maplibre-gl": "^5.12.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "~5.8.3",
+    "vite": "^6.0.0"
+  }
+}

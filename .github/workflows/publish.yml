@@ -1,0 +1,113 @@
+# Builds the app, mints a least-privilege public CARTO token, and deploys to GitHub Pages on every push to main.
+#
+# The only secret is an M2M OAuth client (CARTO_CLI_M2M_CLIENT_ID / CARTO_CLI_M2M_CLIENT_SECRET, created in
+# CARTO Workspace → Developers → Credentials). The token that ends up in the public bundle is public by design:
+# scoped to one table, sql+maps only, referer-locked to this site's URL.
+#
+# Today the token step is a small script on top of `carto credentials`. Once `carto app package` ships
+# (CartoDB/cloud-native#28842) the two CARTO steps collapse into:
+#   npx --yes @carto/carto-cli app package dist --out dist-public --slug retail-stores-explorer --url "$PUBLIC_URL"
+# Internal deploys (`carto app deploy`, behind the org login) are not run from CI until an M2M identity can own
+# a hosted app (CartoDB/cloud-native#28848).
+name: Build and publish
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+env:
+  CARTO_CLI_VERSION: "0.11.0"
+  CARTO_API_BASE_URL: https://gcp-us-east1.api.carto.com
+  CARTO_CONNECTION: carto_dw
+  CARTO_TABLE: carto-demo-data.demo_tables.retail_stores
+  APP_SLUG: retail-stores-explorer
+  PUBLIC_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm }
+      - run: npm ci
+      - run: npm run build
+
+      # Nothing credential-like may ship in the bundle; the token is added later, next to it.
+      - name: Bundle hygiene
+        run: |
+          set -euo pipefail
+          test ! -e dist/carto-info.json || { echo "dist ships a carto-info.json"; exit 1; }
+          if grep -rEl 'eyJ[A-Za-z0-9_-]{20,}\.eyJ[A-Za-z0-9_-]{20,}\.' dist; then echo "JWT-like string in bundle"; exit 1; fi
+          echo "bundle clean"
+
+      - uses: actions/upload-artifact@v4
+        with: { name: dist, path: dist, retention-days: 1 }
+
+  publish:
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    env:
+      CARTO_CLI_M2M_CLIENT_ID: ${{ secrets.CARTO_CLI_M2M_CLIENT_ID }}
+      CARTO_CLI_M2M_CLIENT_SECRET: ${{ secrets.CARTO_CLI_M2M_CLIENT_SECRET }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { name: dist, path: dist }
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+
+      - name: Log in to CARTO (M2M)
+        run: npx --yes @carto/carto-cli@$CARTO_CLI_VERSION auth login --m2m --api-base-url "$CARTO_API_BASE_URL"
+
+      # Token names are unique per account, so app:<slug> doubles as the idempotency key:
+      # revoke the previous one, mint a fresh one, write it next to the bundle.
+      - name: Mint the public token and write carto-info.json
+        run: |
+          set -euo pipefail
+          carto() { npx --yes @carto/carto-cli@$CARTO_CLI_VERSION "$@"; }
+          NAME="app:$APP_SLUG"
+          carto credentials list --json | jq -r --arg n "$NAME" '.tokens[] | select(.name==$n) | .token' | while read -r old; do
+            [ -n "$old" ] && carto credentials delete token "$old" --yes >/dev/null && echo "revoked previous $NAME"
+          done
+          carto credentials create token --json \
+            --connection "$CARTO_CONNECTION" --source "$CARTO_TABLE" \
+            --apis sql,maps --referers "${PUBLIC_URL%/}*" --name "$NAME" > token.json
+          TOKEN=$(jq -r .token token.json); rm -f token.json
+          echo "::add-mask::$TOKEN"
+          jq -n --arg t "$TOKEN" --arg api "$CARTO_API_BASE_URL" \
+            '{schemaVersion: 1, accessToken: $t, apiBaseUrl: $api, user: null}' > dist/carto-info.json
+          echo "minted $NAME: grant $CARTO_CONNECTION → $CARTO_TABLE, apis sql+maps, referer ${PUBLIC_URL%/}*"
+
+      # Replay what the app does (expect 200) and probe raw SQL (expect 403) before anything is deployed.
+      - name: Verify the token
+        run: |
+          set -euo pipefail
+          TOKEN=$(jq -r .accessToken dist/carto-info.json)
+          code=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $TOKEN" -H "Referer: $PUBLIC_URL" \
+            "$CARTO_API_BASE_URL/v3/maps/$CARTO_CONNECTION/table?name=$CARTO_TABLE&client=github-actions")
+          [ "$code" = "200" ] || { echo "tilejson: expected 200, got $code"; exit 1; }
+          code=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/json" -d '{"q":"SELECT 1"}' "$CARTO_API_BASE_URL/v3/sql/$CARTO_CONNECTION/query")
+          [ "$code" = "403" ] || { echo "forbidden probe: expected 403, got $code"; exit 1; }
+          echo "token verified: table 200, raw SQL 403"
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: dist }
+      - id: deploy
+        uses: actions/deploy-pages@v4

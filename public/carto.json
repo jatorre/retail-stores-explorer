@@ -1,0 +1,4 @@
+{
+  "name": "Retail Stores Explorer",
+  "apis": ["maps", "sql"]
+}
