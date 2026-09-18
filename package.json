@@ -1,9 +1,9 @@
 {
   "name": "retail-stores-explorer",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.1",
   "type": "module",
-  "description": "CARTO Hosted App demo: retail stores explorer powered by the per-viewer CARTO token",
+  "description": "CARTO Hosted App: 11,966 US retail stores aggregated live into 3D H3 columns (H3TileLayer) with glowing stores (VectorTileLayer)",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@carto/api-client": "^0.5.34",
+    "@deck.gl/aggregation-layers": "^9.4.0",
     "@deck.gl/carto": "^9.4.0",
     "@deck.gl/core": "^9.4.0",
     "@deck.gl/layers": "^9.4.0",

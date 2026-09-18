@@ -1,0 +1,6 @@
+{
+  "connection": "carto_dw",
+  "table": "carto-demo-data.demo_tables.retail_stores",
+  "h3Statement": "SELECT `carto-un`.carto.H3_FROMGEOGPOINT(geom, 8) AS h3, storetype, revenue, size_m2 FROM `carto-demo-data.demo_tables.retail_stores`",
+  "h3AggregationExp": "COUNT(*) AS n, SUM(revenue) AS revenue, AVG(size_m2) AS size_m2"
+}

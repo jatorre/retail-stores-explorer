@@ -5,72 +5,92 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <!-- Send the full page URL as Referer on cross-origin HTTPS requests so a path-locked CARTO token (e.g. a GitHub Pages project site) matches. -->
     <meta name="referrer" content="no-referrer-when-downgrade" />
-    <title>Retail Stores Explorer</title>
-    <meta name="description" content="CARTO Hosted App demo — retail stores by type, revenue and size." />
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%23162945'/%3E%3Ccircle cx='16' cy='16' r='6' fill='%2347DB99'/%3E%3C/svg%3E" />
+    <title>Retail America in Relief</title>
+    <meta name="description" content="11,966 US retail stores aggregated live by CARTO into 3D hexagonal columns. A CARTO Hosted App." />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%23070a10'/%3E%3Ccircle cx='16' cy='16' r='6' fill='%23ffb03b'/%3E%3C/svg%3E" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="./src/style.css" />
   </head>
   <body>
-    <header id="topbar">
-      <div class="brand">
-        <span class="brand-mark" aria-hidden="true"></span>
-        <span class="brand-name">Retail Stores Explorer</span>
-        <span class="brand-tag">Hosted App</span>
+    <div id="map"></div>
+    <canvas id="deck-canvas"></canvas>
+
+    <!-- Title card -->
+    <section id="title" class="panel" aria-label="About this map">
+      <div class="eyebrow">CARTO · Hosted App · United States</div>
+      <h1>Retail America in Relief</h1>
+      <p class="caption">
+        11,966 retail stores, aggregated live by CARTO into hexagonal columns. Height and colour follow the
+        metric you choose. Zoom in and the columns give way to the stores themselves.
+      </p>
+      <div class="stats" aria-label="Figures for the current view">
+        <div class="stat"><div class="v" id="kpi-count">–</div><div class="k">stores in view</div></div>
+        <div class="stat"><div class="v" id="kpi-revenue">–</div><div class="k">revenue</div></div>
+        <div class="stat"><div class="v" id="kpi-size">–</div><div class="k">avg. size</div></div>
       </div>
-      <div class="session" id="session">
-        <span class="session-dot" aria-hidden="true"></span>
-        <span id="session-label">Connecting to CARTO…</span>
+      <div class="legend">
+        <div class="legend-head"><span id="legend-title">Revenue per hexagon</span><span class="muted" id="legend-res">H3 resolution 4</span></div>
+        <div class="ramp" id="legend-ramp" aria-hidden="true"></div>
+        <div class="ramp-labels"><span id="legend-min">low</span><span id="legend-max">high</span></div>
+        <div class="chips" id="chips" role="group" aria-label="Store types"></div>
+        <button class="link" id="clear-filter" hidden>Show all store types</button>
+        <p class="note"><b>Drag</b> to orbit, <b>scroll</b> to zoom, <b>hover</b> a column for details, <b>click</b> one to dive in.
+          The camera drifts on its own and resumes a few seconds after you let go.</p>
       </div>
-    </header>
+    </section>
 
-    <main id="app">
-      <div id="map"></div>
-      <canvas id="deck-canvas"></canvas>
-
-      <aside id="panel" aria-label="Widgets">
-        <button id="panel-toggle" class="panel-toggle" aria-expanded="true" aria-controls="panel-body">
-          <span class="panel-title">Stores in view</span>
-          <span class="chevron" aria-hidden="true"></span>
-        </button>
-
-        <div id="panel-body">
-          <section class="kpis" aria-label="Key figures">
-            <div class="kpi">
-              <span class="kpi-label">Stores</span>
-              <span class="kpi-value" id="kpi-count">–</span>
-            </div>
-            <div class="kpi">
-              <span class="kpi-label">Revenue</span>
-              <span class="kpi-value" id="kpi-revenue">–</span>
-            </div>
-            <div class="kpi">
-              <span class="kpi-label">Avg. size</span>
-              <span class="kpi-value" id="kpi-size">–</span>
-            </div>
-          </section>
-
-          <section class="widget" aria-label="Store type">
-            <div class="widget-head">
-              <h2>Store type</h2>
-              <button id="clear-filter" class="link-button" hidden>Clear</button>
-            </div>
-            <p class="widget-hint">Click a type to filter the map and figures. Colors match the map.</p>
-            <ul id="categories" class="categories" role="list"></ul>
-          </section>
-
-          <footer class="panel-foot">
-            <span>Source: <code>carto-demo-data.demo_tables.retail_stores</code></span>
-          </footer>
+    <!-- Control deck -->
+    <section id="controls" class="panel" aria-label="Controls">
+      <div class="row">
+        <div class="seg" id="view-seg" role="tablist" aria-label="View">
+          <button data-view="hex" class="on" role="tab" aria-selected="true">Columns</button>
+          <button data-view="stores" role="tab" aria-selected="false">Stores</button>
         </div>
-      </aside>
-
-      <div id="status" class="status" role="status" aria-live="polite">
-        <div class="status-card">
-          <div class="spinner" aria-hidden="true"></div>
-          <p id="status-text">Connecting to CARTO…</p>
+        <button class="btn" id="reset" title="Return to the initial view (R)">Reset view</button>
+      </div>
+      <div class="field">
+        <label>Metric</label>
+        <div class="seg" id="metric-seg" role="tablist" aria-label="Metric">
+          <button data-metric="revenue" class="on" role="tab" aria-selected="true">Revenue</button>
+          <button data-metric="n" role="tab" aria-selected="false">Stores</button>
+          <button data-metric="size_m2" role="tab" aria-selected="false">Avg. size</button>
         </div>
       </div>
-    </main>
+      <div class="sliders">
+        <div class="slider">
+          <label for="res">Hexagon size <output id="res-out">resolution 4</output></label>
+          <input type="range" id="res" min="2" max="6" step="1" value="4" />
+        </div>
+        <div class="slider">
+          <label for="height">Column height <output id="height-out">1.0×</output></label>
+          <input type="range" id="height" min="0" max="300" step="5" value="100" />
+        </div>
+      </div>
+      <div class="toggles">
+        <label class="toggle"><input type="checkbox" id="cinematic" checked /> Cinematic camera</label>
+        <label class="toggle"><input type="checkbox" id="labels" checked /> Basemap labels</label>
+      </div>
+      <div class="footer">
+        <span><kbd>Space</kbd> camera · <kbd>R</kbd> reset · <kbd>1</kbd><kbd>2</kbd> view</span>
+        <span>Data: carto-demo-data · Basemap: CARTO</span>
+      </div>
+    </section>
+
+    <!-- Badges -->
+    <div id="badges">
+      <div class="panel badge" id="camera-badge"><span class="dot cyan"></span><span id="camera-label">Camera orbiting</span></div>
+      <div class="panel badge" id="session"><span class="dot"></span><span id="session-label">Connecting to CARTO…</span></div>
+    </div>
+
+    <!-- Loading / error overlay -->
+    <div id="loading" role="status" aria-live="polite">
+      <div class="card">
+        <div class="spinner" aria-hidden="true"></div>
+        <p class="msg" id="status-text">Connecting to CARTO…</p>
+      </div>
+    </div>
 
     <script type="module" src="./src/main.ts"></script>
   </body>
