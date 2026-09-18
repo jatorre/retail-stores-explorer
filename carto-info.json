@@ -1,0 +1,5 @@
+{
+  "schemaVersion": 1,
+  "accessToken": "eyJhbGciOiJIUzI1NiJ9.eyJhIjoiYWNfN3hoZnd5bWwiLCJqdGkiOiJhZDk5ODIyNCIsImV4cCI6MTgwNTM4MDUwN30.6ukNfANSDAOxlyzEhMwVZ8tgZU3pGwLfNh8ClPwRPM4",
+  "apiBaseUrl": "https://gcp-us-east1.api.carto.com"
+}

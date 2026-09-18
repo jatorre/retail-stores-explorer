@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Send the full page URL as Referer on cross-origin HTTPS requests so a path-locked CARTO token (e.g. a GitHub Pages project site) matches. -->
+    <meta name="referrer" content="no-referrer-when-downgrade" />
+    <title>Retail Stores Explorer</title>
+    <meta name="description" content="CARTO Hosted App demo — retail stores by type, revenue and size." />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%23162945'/%3E%3Ccircle cx='16' cy='16' r='6' fill='%2347DB99'/%3E%3C/svg%3E" />
+    <script type="module" crossorigin src="./assets/index-Yqb7D8u_.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-PiE5EIzg.css">
+  </head>
+  <body>
+    <header id="topbar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span class="brand-name">Retail Stores Explorer</span>
+        <span class="brand-tag">Hosted App</span>
+      </div>
+      <div class="session" id="session">
+        <span class="session-dot" aria-hidden="true"></span>
+        <span id="session-label">Connecting to CARTO…</span>
+      </div>
+    </header>
+
+    <main id="app">
+      <div id="map"></div>
+      <canvas id="deck-canvas"></canvas>
+
+      <aside id="panel" aria-label="Widgets">
+        <button id="panel-toggle" class="panel-toggle" aria-expanded="true" aria-controls="panel-body">
+          <span class="panel-title">Stores in view</span>
+          <span class="chevron" aria-hidden="true"></span>
+        </button>
+
+        <div id="panel-body">
+          <section class="kpis" aria-label="Key figures">
+            <div class="kpi">
+              <span class="kpi-label">Stores</span>
+              <span class="kpi-value" id="kpi-count">–</span>
+            </div>
+            <div class="kpi">
+              <span class="kpi-label">Revenue</span>
+              <span class="kpi-value" id="kpi-revenue">–</span>
+            </div>
+            <div class="kpi">
+              <span class="kpi-label">Avg. size</span>
+              <span class="kpi-value" id="kpi-size">–</span>
+            </div>
+          </section>
+
+          <section class="widget" aria-label="Store type">
+            <div class="widget-head">
+              <h2>Store type</h2>
+              <button id="clear-filter" class="link-button" hidden>Clear</button>
+            </div>
+            <p class="widget-hint">Click a type to filter the map and figures. Colors match the map.</p>
+            <ul id="categories" class="categories" role="list"></ul>
+          </section>
+
+          <footer class="panel-foot">
+            <span>Source: <code>carto-demo-data.demo_tables.retail_stores</code></span>
+          </footer>
+        </div>
+      </aside>
+
+      <div id="status" class="status" role="status" aria-live="polite">
+        <div class="status-card">
+          <div class="spinner" aria-hidden="true"></div>
+          <p id="status-text">Connecting to CARTO…</p>
+        </div>
+      </div>
+    </main>
+
+  </body>
+</html>
