@@ -179,7 +179,8 @@ function baseHeight() {
 function buildLayers() {
   const zoom = state.viewState.zoom;
   const showHex = state.view === 'hex';
-  const hexOpacity = showHex ? Math.max(0, Math.min(1, 1 - (zoom - 7.5) / 2.5)) : 0;
+  // Columns hand over to the stores between zoom 6.8 and 8.6, so a dive lands among stores, not walls.
+  const hexOpacity = showHex ? Math.max(0, Math.min(1, 1 - (zoom - 6.8) / 1.8)) : 0;
   const storesVisible = state.view === 'stores' || zoom >= STORES_FROM_ZOOM;
   const breaks = state.breaks[state.metric];
   const ceiling = state.ceiling[state.metric] ?? (breaks?.at(-1) ?? 1);

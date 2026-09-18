@@ -1,7 +1,7 @@
 {
   "name": "retail-stores-explorer",
   "private": true,
-  "version": "0.2.1",
+  "version": "0.2.2",
   "type": "module",
   "description": "CARTO Hosted App: 11,966 US retail stores aggregated live into 3D H3 columns (H3TileLayer) with glowing stores (VectorTileLayer)",
   "scripts": {
